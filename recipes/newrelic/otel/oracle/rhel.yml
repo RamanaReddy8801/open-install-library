@@ -45,6 +45,7 @@ install:
       cmds:
         - task: assert_pre_req
         - task: check_db_connection
+        - task: install_nrdot_collector
 
     assert_pre_req:
       cmds:
@@ -97,3 +98,37 @@ install:
           fi
 
           echo -e "\e[32mDatabase connection successful.\e[0m Oracle DB version: $DB_VERSION"
+
+          # Version check — must be 19c (major version >= 19)
+          DB_MAJOR_VERSION=$(echo "$DB_VERSION" | cut -d'.' -f1)
+          if [ "$DB_MAJOR_VERSION" -lt 19 ]; then
+            echo ""
+            echo -e "\e[31mERROR:\e[0m Unsupported Oracle DB version: $DB_VERSION" >&2
+            echo -e "We are supporting Oracle Database 19c or later versions only." >&2
+            echo ""
+            exit 131
+          fi
+          echo -e "\e[32mOracle DB version check passed:\e[0m $DB_VERSION is supported (19c or later)."
+
+    install_nrdot_collector:
+      cmds:
+        - |
+          ARCH=$(uname -m)
+          echo ""
+          echo "==> Installing NRDOT Collector for $ARCH architecture..."
+
+          if [ "$ARCH" = "x86_64" ]; then
+            RPM_URL="https://download.newrelic.com/database-monitoring/nrdot-collector/nrdot-collector-host-linux-amd64-latest.rpm"
+            RPM_FILE="nrdot-collector-host-linux-amd64-latest.rpm"
+          elif [ "$ARCH" = "aarch64" ]; then
+            RPM_URL="https://download.newrelic.com/database-monitoring/nrdot-collector/nrdot-collector-host-linux-arm64-latest.rpm"
+            RPM_FILE="nrdot-collector-host-linux-arm64-latest.rpm"
+          fi
+
+          echo "==> Downloading NRDOT Collector: $RPM_URL"
+          curl -L -o "/tmp/$RPM_FILE" "$RPM_URL"
+
+          echo "==> Installing NRDOT Collector RPM..."
+          sudo rpm -ivh "/tmp/$RPM_FILE"
+
+          echo -e "\e[32mNRDOT Collector installed successfully.\e[0m"
