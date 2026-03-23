@@ -137,9 +137,26 @@ install:
           curl -L -o "/tmp/$RPM_FILE" "$RPM_URL"
 
           echo "==> Installing NRDOT Collector RPM..."
-          sudo rpm -ivh "/tmp/$RPM_FILE"
-
-          echo -e "\e[32mNRDOT Collector installed successfully.\e[0m"
+          if rpm -q nrdot-collector-host &>/dev/null; then
+            echo ""
+            echo -e "\e[33mNRDOT Collector is already installed.\e[0m"
+            echo ""
+            echo "Make sure you have completed the following steps before proceeding:"
+            echo ""
+            echo "  1. Update /etc/nrdot-collector-host/config.yaml with newrelicoraclereceiver"
+            echo "     if not present. Refer to:"
+            echo "     https://docs.newrelic.com/docs/opentelemetry/database/otel-oracledb/#mdatabase-user"
+            echo ""
+            echo "  2. Make sure the monitoring user (c##{{.NR_CLI_DB_USERNAME}}) is created"
+            echo "     and has the required permissions granted."
+            echo ""
+            echo "  3. After making the above changes, restart the NRDOT Collector:"
+            echo "     sudo systemctl restart nrdot-collector-host"
+            echo ""
+          else
+            sudo rpm -ivh "/tmp/$RPM_FILE"
+            echo -e "\e[32mNRDOT Collector installed successfully.\e[0m"
+          fi
 
     create_db_user:
       cmds:
