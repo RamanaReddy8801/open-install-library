@@ -68,7 +68,7 @@ install:
 
           DB_VERSION=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
             {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
-            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nSELECT version FROM v\$instance;\nEXIT;\n' | sudo -u oracle sqlplus -S / as sysdba")
+            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nSELECT version FROM v\$instance;\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
 
           if [ -z "$DB_VERSION" ] || echo "$DB_VERSION" | grep -qi "error\|ORA-"; then
             echo ""
