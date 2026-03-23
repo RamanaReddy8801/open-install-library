@@ -141,7 +141,7 @@ install:
             echo ""
             echo -e "\e[33mNRDOT Collector is already installed.\e[0m"
             echo ""
-            echo "Make sure you have completed the following steps before proceeding:"
+            echo "Please follow the steps below to complete the setup:"
             echo ""
             echo "  1. Update /etc/nrdot-collector-host/config.yaml with newrelicoraclereceiver"
             echo "     if not present. Refer to:"
@@ -153,10 +153,11 @@ install:
             echo "  3. After making the above changes, restart the NRDOT Collector:"
             echo "     sudo systemctl restart nrdot-collector-host"
             echo ""
-          else
-            sudo rpm -ivh "/tmp/$RPM_FILE"
-            echo -e "\e[32mNRDOT Collector installed successfully.\e[0m"
+            exit 0
           fi
+
+          sudo rpm -ivh "/tmp/$RPM_FILE"
+          echo -e "\e[32mNRDOT Collector installed successfully.\e[0m"
 
     create_db_user:
       cmds:
@@ -175,17 +176,53 @@ install:
             {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
             "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nWHENEVER SQLERROR EXIT SQL.SQLCODE\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
 
-          if echo "$RESULT" | grep -qi "ORA-\|error"; then
-            # ORA-01920 means user already exists — treat as success
-            if echo "$RESULT" | grep -q "ORA-01920"; then
-              echo -e "\e[33mMonitoring user $DB_USER already exists. Skipping creation.\e[0m"
+          if echo "$RESULT" | grep -q "ORA-01920"; then
+            echo ""
+            echo -e "\e[33mMonitoring user $DB_USER already exists.\e[0m"
+            echo ""
+            echo "What would you like to do?"
+            echo "  1. Use the existing user $DB_USER and continue with grants"
+            echo "  2. Create a new username"
+            echo ""
+            read -rp "Enter your choice (1 or 2): " USER_CHOICE
+
+            if [ "$USER_CHOICE" = "1" ]; then
+              echo ""
+              echo -e "\e[32mUsing existing user $DB_USER. Continuing with grants...\e[0m"
+
+            elif [ "$USER_CHOICE" = "2" ]; then
+              echo ""
+              read -rp "Enter new monitoring username (will be created as c##<name>): " NEW_USERNAME
+              DB_USER="c##$NEW_USERNAME"
+              echo ""
+              echo "==> Creating new Oracle monitoring user: $DB_USER ..."
+
+              NEW_RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+                {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
+                "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nWHENEVER SQLERROR EXIT SQL.SQLCODE\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
+
+              if echo "$NEW_RESULT" | grep -qi "ORA-\|error"; then
+                echo ""
+                echo -e "\e[31mERROR:\e[0m Failed to create monitoring user $DB_USER:" >&2
+                echo "$NEW_RESULT" >&2
+                echo ""
+                exit 131
+              fi
+              echo -e "\e[32mMonitoring user $DB_USER created successfully.\e[0m"
+
             else
               echo ""
-              echo -e "\e[31mERROR:\e[0m Failed to create monitoring user $DB_USER:" >&2
-              echo "$RESULT" >&2
-              echo ""
+              echo -e "\e[31mERROR:\e[0m Invalid choice. Please re-run and enter 1 or 2." >&2
               exit 131
             fi
+
+          elif echo "$RESULT" | grep -qi "ORA-\|error"; then
+            echo ""
+            echo -e "\e[31mERROR:\e[0m Failed to create monitoring user $DB_USER:" >&2
+            echo "$RESULT" >&2
+            echo ""
+            exit 131
+
           else
             echo -e "\e[32mMonitoring user $DB_USER created successfully.\e[0m"
           fi
