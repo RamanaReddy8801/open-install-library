@@ -31,6 +31,13 @@ inputVars:
     prompt: "SSH user for Oracle DB VM"
     secret: false
     default: "opc"
+  - name: NR_CLI_DB_USERNAME
+    prompt: "Monitoring username (will be created as c##<name> in Oracle). Default: newrelic"
+    secret: false
+    default: "newrelic"
+  - name: NR_CLI_DB_PASSWORD
+    prompt: "Password for monitoring user. See Oracle password guidelines: https://docs.oracle.com/en/database/oracle/oracle-database/12.2/dbseg/keeping-your-oracle-database-secure.html#GUID-451679EB-8676-47E6-82A6-DF025FD65156"
+    secret: true
 
 install:
   version: "3"
@@ -46,6 +53,7 @@ install:
         - task: assert_pre_req
         - task: check_db_connection
         - task: install_nrdot_collector
+        - task: create_db_user
 
     assert_pre_req:
       cmds:
@@ -132,3 +140,35 @@ install:
           sudo rpm -ivh "/tmp/$RPM_FILE"
 
           echo -e "\e[32mNRDOT Collector installed successfully.\e[0m"
+
+    create_db_user:
+      cmds:
+        - |
+          DB_USER="c##{{.NR_CLI_DB_USERNAME}}"
+          echo ""
+          echo "==> Creating Oracle monitoring user: $DB_USER ..."
+
+          # Restore SSH agent socket if running under sudo
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            SSH_AUTH_SOCK=$(ls /tmp/ssh-*/agent.* 2>/dev/null | head -1)
+            export SSH_AUTH_SOCK
+          fi
+
+          RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+            {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
+            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nWHENEVER SQLERROR EXIT SQL.SQLCODE\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
+
+          if echo "$RESULT" | grep -qi "ORA-\|error"; then
+            # ORA-01920 means user already exists — treat as success
+            if echo "$RESULT" | grep -q "ORA-01920"; then
+              echo -e "\e[33mMonitoring user $DB_USER already exists. Skipping creation.\e[0m"
+            else
+              echo ""
+              echo -e "\e[31mERROR:\e[0m Failed to create monitoring user $DB_USER:" >&2
+              echo "$RESULT" >&2
+              echo ""
+              exit 131
+            fi
+          else
+            echo -e "\e[32mMonitoring user $DB_USER created successfully.\e[0m"
+          fi
