@@ -153,6 +153,7 @@ install:
             echo "  3. After making the above changes, restart the NRDOT Collector:"
             echo "     sudo systemctl restart nrdot-collector-host"
             echo ""
+            touch /tmp/nrdot_already_installed
             exit 0
           fi
 
@@ -162,6 +163,11 @@ install:
     create_db_user:
       cmds:
         - |
+          if [ -f /tmp/nrdot_already_installed ]; then
+            rm -f /tmp/nrdot_already_installed
+            exit 0
+          fi
+
           DB_USER="c##{{.NR_CLI_DB_USERNAME}}"
           echo ""
           echo "==> Creating Oracle monitoring user: $DB_USER ..."
