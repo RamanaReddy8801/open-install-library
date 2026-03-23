@@ -23,6 +23,24 @@ keywords:
   - Linux
   - NRDOT
 
+inputVars:
+  - name: NR_CLI_DB_HOSTNAME
+    prompt: "Oracle DB hostname or IP (the remote DB VM)"
+    secret: false
+  - name: NR_CLI_DB_PORT
+    prompt: "Oracle DB port"
+    secret: false
+    default: "1521"
+  - name: NR_CLI_DB_USERNAME
+    prompt: "Oracle DB username"
+    secret: false
+  - name: NR_CLI_DB_PASSWORD
+    prompt: "Oracle DB password"
+    secret: true
+  - name: NR_CLI_DB_SERVICE_NAME
+    prompt: "Oracle DB service name (e.g. ORCLCDB, XEPDB1)"
+    secret: false
+
 install:
   version: "3"
   silent: true
@@ -35,11 +53,13 @@ install:
     default:
       cmds:
         - task: assert_pre_req
+        - task: check_db_connection
 
     assert_pre_req:
       cmds:
         - |
           ARCH=$(uname -m)
+          echo "Detected architecture: $ARCH"
           if [ "$ARCH" != "x86_64" ] && [ "$ARCH" != "aarch64" ]; then
             echo ""
             echo -e "\e[31mERROR:\e[0m Unsupported architecture: $ARCH" >&2
@@ -47,3 +67,28 @@ install:
             echo ""
             exit 131
           fi
+          echo -e "\e[32mArchitecture check passed:\e[0m $ARCH is supported."
+
+    check_db_connection:
+      cmds:
+        - |
+          echo ""
+          echo "==> Connecting to Oracle DB at {{.NR_CLI_DB_HOSTNAME}}:{{.NR_CLI_DB_PORT}}/{{.NR_CLI_DB_SERVICE_NAME}} ..."
+
+          DB_VERSION=$(sqlplus -S "{{.NR_CLI_DB_USERNAME}}/{{.NR_CLI_DB_PASSWORD}}@{{.NR_CLI_DB_HOSTNAME}}:{{.NR_CLI_DB_PORT}}/{{.NR_CLI_DB_SERVICE_NAME}}" <<'SQLEOF'
+          SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF
+          SELECT version FROM v$instance;
+          EXIT;
+          SQLEOF
+          )
+
+          if echo "$DB_VERSION" | grep -qi "error\|ORA-"; then
+            echo ""
+            echo -e "\e[31mERROR:\e[0m Oracle DB connection failed:" >&2
+            echo "$DB_VERSION" >&2
+            echo -e "Please verify the connection details and ensure the Oracle listener is running." >&2
+            echo ""
+            exit 131
+          fi
+
+          echo -e "\e[32mDatabase connection successful.\e[0m Oracle DB version: $DB_VERSION"
