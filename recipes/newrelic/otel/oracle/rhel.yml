@@ -66,6 +66,21 @@ install:
           echo ""
           echo "==> Connecting to Oracle DB VM at {{.NR_CLI_DB_HOSTNAME}} via SSH..."
 
+          # When NR CLI runs under sudo, SSH_AUTH_SOCK is dropped.
+          # Find the SSH agent socket from /tmp so root can use the forwarded key.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            SSH_AUTH_SOCK=$(ls /tmp/ssh-*/agent.* 2>/dev/null | head -1)
+            export SSH_AUTH_SOCK
+          fi
+
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            echo ""
+            echo -e "\e[31mERROR:\e[0m SSH agent socket not found." >&2
+            echo -e "Please connect to this VM using SSH agent forwarding: ssh -A opc@<this-vm-ip>" >&2
+            echo ""
+            exit 131
+          fi
+
           DB_VERSION=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
             {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
             "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nSELECT version FROM v\$instance;\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
