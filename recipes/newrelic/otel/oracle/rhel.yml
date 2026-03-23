@@ -180,7 +180,7 @@ install:
 
           RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
             {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
-            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nWHENEVER SQLERROR EXIT SQL.SQLCODE\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
+            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
 
           if echo "$RESULT" | grep -q "ORA-01920"; then
             echo ""
