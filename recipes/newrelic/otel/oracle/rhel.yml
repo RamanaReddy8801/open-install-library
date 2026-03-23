@@ -1,0 +1,41 @@
+name: oracle-otel-linux-installer
+displayName: Oracle OTel Integration (Linux)
+description: |
+  Sets up Oracle monitoring via the New Relic NRDOT Collector.
+  Downloads and installs the NRDOT Collector on this Linux host.
+repository: https://github.com/newrelic-forks/nrdot-collector-components/tree/feature/otel-oracle-qpm-receiver/receiver/newrelicoraclereceiver
+installTargets:
+  - type: host
+    os: Linux
+
+keywords:
+  - OTel
+  - OpenTelemetry
+  - Oracle
+  - Linux
+  - NRDOT
+
+install:
+  version: "3"
+  silent: true
+
+  vars:
+    ARCH:
+      sh: uname -m
+
+  tasks:
+    default:
+      cmds:
+        - task: assert_pre_req
+
+    assert_pre_req:
+      cmds:
+        - |
+          ARCH=$(uname -m)
+          if [ "$ARCH" != "x86_64" ] && [ "$ARCH" != "aarch64" ]; then
+            echo ""
+            echo -e "\e[31mERROR:\e[0m Unsupported architecture: $ARCH" >&2
+            echo -e "We are supporting only this Supported architecture: Linux with AMD64 and ARM64" >&2
+            echo ""
+            exit 131
+          fi
