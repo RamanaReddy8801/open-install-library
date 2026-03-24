@@ -54,6 +54,7 @@ install:
         - task: check_db_connection
         - task: install_nrdot_collector
         - task: create_db_user
+        - task: grant_privileges
 
     assert_pre_req:
       cmds:
@@ -194,18 +195,21 @@ install:
 
             if [ "$USER_CHOICE" = "1" ]; then
               echo ""
-              echo -e "\e[32mUsing existing user $DB_USER. Continuing with grants...\e[0m"
+              echo -e "\e[32mUsing existing user:\e[0m \e[1m$DB_USER\e[0m"
 
             elif [ "$USER_CHOICE" = "2" ]; then
               echo ""
-              read -rp "Enter new monitoring username (will be created as c##<name>): " NEW_USERNAME
+              echo "  Note: Just type the name without c## prefix. It will be added automatically."
+              echo "        Example: type 'newrelic' → creates 'c##newrelic' in Oracle"
+              echo ""
+              read -rp "Enter new monitoring username: " NEW_USERNAME
               DB_USER="c##$NEW_USERNAME"
               echo ""
               echo "==> Creating new Oracle monitoring user: $DB_USER ..."
 
               NEW_RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
                 {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
-                "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nWHENEVER SQLERROR EXIT SQL.SQLCODE\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'")
+                "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
 
               if echo "$NEW_RESULT" | grep -qi "ORA-\|error"; then
                 echo ""
@@ -214,7 +218,9 @@ install:
                 echo ""
                 exit 131
               fi
-              echo -e "\e[32mMonitoring user $DB_USER created successfully.\e[0m"
+              echo ""
+              echo -e "\e[32mOracle monitoring user created successfully.\e[0m"
+              echo -e "  Oracle username: \e[1m$DB_USER\e[0m"
 
             else
               echo ""
@@ -230,5 +236,44 @@ install:
             exit 131
 
           else
-            echo -e "\e[32mMonitoring user $DB_USER created successfully.\e[0m"
+            echo ""
+            echo -e "\e[32mOracle monitoring user created successfully.\e[0m"
+            echo -e "  Oracle username: \e[1m$DB_USER\e[0m"
           fi
+
+          echo "$DB_USER" > /tmp/nrdot_db_user
+
+    grant_privileges:
+      cmds:
+        - |
+          if [ ! -f /tmp/nrdot_db_user ]; then
+            exit 0
+          fi
+
+          DB_USER=$(cat /tmp/nrdot_db_user)
+          rm -f /tmp/nrdot_db_user
+
+          echo ""
+          echo "==> Granting monitoring privileges to $DB_USER ..."
+
+          # Restore SSH agent socket if running under sudo
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            SSH_AUTH_SOCK=$(ls /tmp/ssh-*/agent.* 2>/dev/null | head -1)
+            export SSH_AUTH_SOCK
+          fi
+
+          GRANT_RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+            {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
+            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nALTER USER $DB_USER SET CONTAINER_DATA=ALL CONTAINER=CURRENT;\nGRANT CREATE SESSION TO $DB_USER CONTAINER=ALL;\nGRANT SET CONTAINER TO $DB_USER CONTAINER=ALL;\nGRANT CONNECT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SESSION TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SYSSTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SESSTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$STATNAME TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SYSTEM_EVENT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SHARED_SERVER TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$DISPATCHER TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$CIRCUIT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$RESOURCE_LIMIT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$LOCK TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$DATABASE TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$PARAMETER TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SQLAREA TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SQL TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$SQL_PLAN TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.V_\$PDBS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$INSTANCE TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SGA TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SESSTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$STATNAME TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SYSSTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SQLAREA TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$LIBRARYCACHE TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$ROWCACHE TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$PGASTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$CONTAINERS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$PDBS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$CON_SYSMETRIC TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SYSMETRIC TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$FILESTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SYSTEM_EVENT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$ACTIVE_SERVICES TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SESSION TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$SESSION_WAIT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON SYS.GV_\$ROLLSTAT TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON DBA_OBJECTS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON DBA_TABLESPACES TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON DBA_TABLESPACE_USAGE_METRICS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON DBA_DATA_FILES TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON DBA_USERS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON CDB_SERVICES TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON CDB_DATA_FILES TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON CDB_TABLESPACE_USAGE_METRICS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON CDB_USERS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON CDB_PDBS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON ALL_USERS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON ALL_VIEWS TO $DB_USER CONTAINER=ALL;\nGRANT SELECT ON GLOBAL_NAME TO $DB_USER CONTAINER=ALL;\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
+
+          if echo "$GRANT_RESULT" | grep -qi "ORA-\|error"; then
+            echo ""
+            echo -e "\e[31mERROR:\e[0m Failed to grant monitoring privileges to $DB_USER:" >&2
+            echo "$GRANT_RESULT" >&2
+            echo ""
+            exit 131
+          fi
+
+          echo ""
+          echo -e "\e[32mMonitoring privileges granted successfully.\e[0m"
+          echo -e "  Oracle username: \e[1m$DB_USER\e[0m"
