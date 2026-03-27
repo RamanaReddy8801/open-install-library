@@ -316,6 +316,15 @@ install:
     configure_nrdot:
       cmds:
         - |
+          if [ -f /tmp/nrdot_already_installed ]; then
+            rm -f /tmp/nrdot_already_installed
+            echo ""
+            echo -e "\e[33mNRDOT Collector already installed — skipping config.yaml update.\e[0m"
+            echo -e "Please update /etc/nrdot-collector-host/config.yaml manually if needed."
+            echo ""
+            exit 0
+          fi
+
           echo ""
           echo "==> Configuring NRDOT Collector for Oracle DB monitoring..."
 
@@ -631,7 +640,7 @@ install:
           EOF
 
           # Strip the 12 leading spaces added by YAML indentation
-          sed -i 's/^            //' /etc/nrdot-collector-host/config.yaml
+          # sed -i 's/^            //' /etc/nrdot-collector-host/config.yaml
 
           echo -e "\e[32mNRDOT Collector configured successfully.\e[0m"
           echo -e "  Config file: \e[1m/etc/nrdot-collector-host/config.yaml\e[0m"
