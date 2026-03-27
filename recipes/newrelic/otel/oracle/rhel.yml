@@ -399,7 +399,7 @@ install:
                   - /var/log/messages
                   - /var/log/secure
                   - /var/log/yum.log
-              newrelicoracledb/cdb:
+              oracledb/cdb:
                 endpoint: "{{.NR_CLI_DB_HOSTNAME}}:{{.NR_CLI_DB_PORT}}"
                 username: "$DB_USER"
                 password: "$NR_CLI_DB_PASSWORD"
@@ -412,7 +412,7 @@ install:
                 # enable_connection_scraper: true
                 # enable_container_scraper: true
                 # enable_database_info_scraper: true
-              newrelicoracledb/pdb:
+              oracledb/pdb:
                 endpoint: "{{.NR_CLI_DB_HOSTNAME}}:{{.NR_CLI_DB_PORT}}"
                 username: "$DB_USER"
                 password: "$NR_CLI_DB_PASSWORD"
@@ -624,11 +624,11 @@ install:
                   processors: [memory_limiter, transform, resourcedetection, resourcedetection/cloud, resourcedetection/env, batch]
                   exporters: [otlp]
                 metrics/oracledb:
-                  receivers: [newrelicoracledb/cdb, newrelicoracledb/pdb]
+                  receivers: [oracledb/cdb, oracledb/pdb]
                   processors: [memory_limiter, resourcedetection/db_safe, batch, transform/clear_metadata, filter/exec_plan_and_query_details_exclude]
                   exporters: [otlp]
                 metrics/exec_plan_and_query_details_to_logs:
-                  receivers: [newrelicoracledb/cdb, newrelicoracledb/pdb]
+                  receivers: [oracledb/cdb, oracledb/pdb]
                   processors: [filter/exec_plan_and_query_details_include]
                   exporters: [metricsaslogs]
                 logs/oracledb:
