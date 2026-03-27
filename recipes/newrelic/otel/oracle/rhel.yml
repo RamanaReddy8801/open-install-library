@@ -205,7 +205,9 @@ install:
 
             if [ "$USER_CHOICE" = "1" ]; then
               echo ""
-              read -rsp "Enter the existing password for $DB_USER: " NR_CLI_DB_PASSWORD
+              stty -echo
+              read -rp "Enter the existing password for $DB_USER: " NR_CLI_DB_PASSWORD
+              stty echo
               echo ""
               echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
               chmod 600 /tmp/nrdot_db_password
