@@ -35,9 +35,6 @@ inputVars:
     prompt: "Monitoring username (will be created as c##<name> in Oracle). Default: newrelic"
     secret: false
     default: "newrelic"
-  - name: NR_CLI_DB_PASSWORD
-    prompt: "Password for monitoring user. See Oracle password guidelines: https://docs.oracle.com/en/database/oracle/oracle-database/12.2/dbseg/keeping-your-oracle-database-secure.html#GUID-451679EB-8676-47E6-82A6-DF025FD65156"
-    secret: true
   - name: NR_CLI_DB_PORT
     prompt: "Oracle listener port"
     secret: false
@@ -177,8 +174,34 @@ install:
             exit 0
           fi
 
-          DB_USER="c##{{.NR_CLI_DB_USERNAME}}"
+          # Auto-generate a password strictly meeting Oracle ora12c_strong_verify_function:
+          # - First char guaranteed uppercase (Oracle requires password not start with digit/special)
+          # - Remaining chars shuffled randomly: uppercase + lowercase + digits + special (#)
+          # - Total 14 chars, unique every time via /dev/urandom
+          _FIRST=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 1)
+          _UPPER=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 2)
+          _LOWER=$(cat /dev/urandom | tr -dc 'a-z' | head -c 6)
+          _DIGITS=$(cat /dev/urandom | tr -dc '0-9' | head -c 4)
+          _REST=$(printf '%s' "${_UPPER}${_LOWER}${_DIGITS}#" | fold -w1 | shuf | tr -d '\n')
+          NR_CLI_DB_PASSWORD="${_FIRST}${_REST}"
+          unset _FIRST _UPPER _LOWER _DIGITS _REST
+          echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
+          chmod 600 /tmp/nrdot_db_password
+
           echo ""
+          echo -e "\e[33m╔══════════════════════════════════════════════════════════════╗\e[0m"
+          echo -e "\e[33m║        ⚠  SAVE THIS PASSWORD — SHOWN ONLY ONCE  ⚠           ║\e[0m"
+          echo -e "\e[33m╠══════════════════════════════════════════════════════════════╣\e[0m"
+          echo -e "\e[33m║                                                              ║\e[0m"
+          echo -e "\e[33m║  Oracle monitoring user password:                            ║\e[0m"
+          echo -e "\e[33m║  \e[1m$NR_CLI_DB_PASSWORD\e[0m\e[33m                                             ║\e[0m"
+          echo -e "\e[33m║                                                              ║\e[0m"
+          echo -e "\e[33m║  Copy this password and store it in a safe place.            ║\e[0m"
+          echo -e "\e[33m║  It will be written to the NRDOT config file automatically.  ║\e[0m"
+          echo -e "\e[33m╚══════════════════════════════════════════════════════════════╝\e[0m"
+          echo ""
+
+          DB_USER="c##{{.NR_CLI_DB_USERNAME}}"
           echo "==> Creating Oracle monitoring user: $DB_USER ..."
 
           # Restore SSH agent socket if running under sudo
@@ -189,7 +212,7 @@ install:
 
           RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
             {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
-            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
+            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"$NR_CLI_DB_PASSWORD\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
 
           if echo "$RESULT" | grep -q "ORA-01920"; then
             echo ""
@@ -217,7 +240,7 @@ install:
 
               NEW_RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
                 {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
-                "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"{{.NR_CLI_DB_PASSWORD}}\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
+                "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"$NR_CLI_DB_PASSWORD\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
 
               if echo "$NEW_RESULT" | grep -qi "ORA-\|error"; then
                 echo ""
@@ -293,6 +316,8 @@ install:
           echo "==> Configuring NRDOT Collector for Oracle DB monitoring..."
 
           DB_USER="c##{{.NR_CLI_DB_USERNAME}}"
+          NR_CLI_DB_PASSWORD=$(cat /tmp/nrdot_db_password)
+          rm -f /tmp/nrdot_db_password
 
           # Determine OTLP endpoint based on NR region
           OTLP_ENDPOINT="otlp.nr-data.net:4317"
@@ -365,7 +390,7 @@ install:
               newrelicoracledb/cdb:
                 endpoint: "{{.NR_CLI_DB_HOSTNAME}}:{{.NR_CLI_DB_PORT}}"
                 username: "$DB_USER"
-                password: "{{.NR_CLI_DB_PASSWORD}}"
+                password: "$NR_CLI_DB_PASSWORD"
                 service: "{{.NR_CLI_DB_SERVICE}}"
                 collection_interval: 30s
                 timeout: 30s
@@ -378,7 +403,7 @@ install:
               newrelicoracledb/pdb:
                 endpoint: "{{.NR_CLI_DB_HOSTNAME}}:{{.NR_CLI_DB_PORT}}"
                 username: "$DB_USER"
-                password: "{{.NR_CLI_DB_PASSWORD}}"
+                password: "$NR_CLI_DB_PASSWORD"
                 service: "{{.NR_CLI_DB_SERVICE}}"
                 collection_interval: 30s
                 timeout: 30s
@@ -600,6 +625,9 @@ install:
                   exporters: [otlp]
               extensions: [health_check]
           EOF
+
+          # Strip the 12 leading spaces added by YAML indentation
+          sed -i 's/^            //' /etc/nrdot-collector-host/config.yaml
 
           echo -e "\e[32mNRDOT Collector configured successfully.\e[0m"
           echo -e "  Config file: \e[1m/etc/nrdot-collector-host/config.yaml\e[0m"
