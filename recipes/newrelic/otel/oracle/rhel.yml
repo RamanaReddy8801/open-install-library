@@ -42,6 +42,9 @@ inputVars:
   - name: NR_CLI_DB_SERVICE
     prompt: "Oracle CDB service name (e.g. ORCLCDB)"
     secret: false
+  - name: NR_CLI_LICENSE_KEY
+    prompt: "New Relic Ingest License Key (found under Account Settings > API Keys, type: INGEST - LICENSE)"
+    secret: true
 
 install:
   version: "3"
@@ -574,7 +577,7 @@ install:
               otlp:
                 endpoint: "$OTLP_ENDPOINT"
                 headers:
-                  api-key: "{{.NEW_RELIC_LICENSE_KEY}}"
+                  api-key: "{{.NR_CLI_LICENSE_KEY}}"
                 compression: gzip
 
             service:
