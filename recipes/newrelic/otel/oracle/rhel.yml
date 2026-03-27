@@ -638,8 +638,8 @@ install:
               extensions: [health_check]
           EOF
 
-          # Strip the 12 leading spaces added by YAML indentation
-          sed -i 's/^            //' /etc/nrdot-collector-host/config.yaml
+          # Strip the 2 leading spaces added by YAML block scalar processing
+          sed -i 's/^  //' /etc/nrdot-collector-host/config.yaml
 
           echo -e "\e[32mNRDOT Collector configured successfully.\e[0m"
           echo -e "  Config file: \e[1m/etc/nrdot-collector-host/config.yaml\e[0m"
