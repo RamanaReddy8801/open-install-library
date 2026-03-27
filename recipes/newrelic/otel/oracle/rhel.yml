@@ -71,6 +71,7 @@ install:
         - task: create_db_user
         - task: grant_privileges
         - task: configure_nrdot
+        - task: restart_nrdot
 
     assert_pre_req:
       cmds:
@@ -171,6 +172,7 @@ install:
             echo "     sudo systemctl restart nrdot-collector-host"
             echo ""
             touch /tmp/nrdot_already_installed
+            touch /tmp/nrdot_skip_restart
             exit 0
           fi
 
@@ -655,3 +657,32 @@ install:
 
           echo -e "\e[32mNRDOT Collector configured successfully.\e[0m"
           echo -e "  Config file: \e[1m/etc/nrdot-collector-host/config.yaml\e[0m"
+
+    restart_nrdot:
+      cmds:
+        - |
+          if [ -f /tmp/nrdot_skip_restart ]; then
+            rm -f /tmp/nrdot_skip_restart
+            echo ""
+            echo -e "\e[33mNRDOT Collector already installed — skipping restart.\e[0m"
+            echo ""
+            exit 0
+          fi
+
+          echo ""
+          echo "==> Restarting NRDOT Collector..."
+          sudo systemctl restart nrdot-collector-host.service
+
+          echo ""
+          echo "==> NRDOT Collector service status:"
+          echo ""
+          sudo systemctl status nrdot-collector-host.service --no-pager
+
+          if sudo systemctl is-active --quiet nrdot-collector-host.service; then
+            echo ""
+            echo -e "\e[32mNRDOT Collector is running successfully.\e[0m"
+          else
+            echo ""
+            echo -e "\e[31mERROR:\e[0m NRDOT Collector failed to start. Check the status output above." >&2
+            exit 131
+          fi
