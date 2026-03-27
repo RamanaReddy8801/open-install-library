@@ -173,7 +173,6 @@ install:
       cmds:
         - |
           if [ -f /tmp/nrdot_already_installed ]; then
-            rm -f /tmp/nrdot_already_installed
             exit 0
           fi
 
