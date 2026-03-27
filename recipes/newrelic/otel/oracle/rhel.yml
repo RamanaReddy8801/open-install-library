@@ -174,15 +174,16 @@ install:
             exit 0
           fi
 
-          # Auto-generate a password strictly meeting Oracle ora12c_strong_verify_function:
-          # - First char guaranteed uppercase (Oracle requires password not start with digit/special)
-          # - Remaining chars shuffled randomly: uppercase + lowercase + digits + special (#)
-          # - Total 14 chars, unique every time via /dev/urandom
+          # Auto-generate a password meeting Oracle password complexity requirements:
+          # - First char guaranteed uppercase (cannot start with digit/special)
+          # - Guaranteed 2+ special chars (# and _), both shell-safe
+          # - Guaranteed uppercase, lowercase, digits
+          # - All parts shuffled randomly — total 15 chars, unique every time
           _FIRST=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 1)
           _UPPER=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 2)
           _LOWER=$(cat /dev/urandom | tr -dc 'a-z' | head -c 6)
           _DIGITS=$(cat /dev/urandom | tr -dc '0-9' | head -c 4)
-          _REST=$(printf '%s' "${_UPPER}${_LOWER}${_DIGITS}#" | fold -w1 | shuf | tr -d '\n')
+          _REST=$(printf '%s' "${_UPPER}${_LOWER}${_DIGITS}#_" | fold -w1 | shuf | tr -d '\n')
           NR_CLI_DB_PASSWORD="${_FIRST}${_REST}"
           unset _FIRST _UPPER _LOWER _DIGITS _REST
           echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
