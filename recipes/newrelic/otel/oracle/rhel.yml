@@ -180,34 +180,6 @@ install:
     create_db_user:
       cmds:
         - |
-          # Auto-generate a password meeting Oracle password complexity requirements:
-          # - First char guaranteed uppercase (cannot start with digit/special)
-          # - Guaranteed 2+ special chars (# and _), both shell-safe
-          # - Guaranteed uppercase, lowercase, digits
-          # - All parts shuffled randomly — total 15 chars, unique every time
-          _FIRST=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 1)
-          _UPPER=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 2)
-          _LOWER=$(cat /dev/urandom | tr -dc 'a-z' | head -c 6)
-          _DIGITS=$(cat /dev/urandom | tr -dc '0-9' | head -c 4)
-          _REST=$(printf '%s' "${_UPPER}${_LOWER}${_DIGITS}#_" | fold -w1 | shuf | tr -d '\n')
-          NR_CLI_DB_PASSWORD="${_FIRST}${_REST}"
-          unset _FIRST _UPPER _LOWER _DIGITS _REST
-          echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
-          chmod 600 /tmp/nrdot_db_password
-
-          echo ""
-          echo -e "\e[33m╔══════════════════════════════════════════════════════════════╗\e[0m"
-          echo -e "\e[33m║        ⚠  SAVE THIS PASSWORD — SHOWN ONLY ONCE  ⚠           ║\e[0m"
-          echo -e "\e[33m╠══════════════════════════════════════════════════════════════╣\e[0m"
-          echo -e "\e[33m║                                                              ║\e[0m"
-          echo -e "\e[33m║  Oracle monitoring user password:                            ║\e[0m"
-          echo -e "\e[33m║  \e[1m$NR_CLI_DB_PASSWORD\e[0m\e[33m                                             ║\e[0m"
-          echo -e "\e[33m║                                                              ║\e[0m"
-          echo -e "\e[33m║  Copy this password and store it in a safe place.            ║\e[0m"
-          echo -e "\e[33m║  It will be written to the NRDOT config file automatically.  ║\e[0m"
-          echo -e "\e[33m╚══════════════════════════════════════════════════════════════╝\e[0m"
-          echo ""
-
           DB_USER="c##{{.NR_CLI_DB_USERNAME}}"
           echo "==> Creating Oracle monitoring user: $DB_USER ..."
 
@@ -219,19 +191,24 @@ install:
 
           RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
             {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
-            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"$NR_CLI_DB_PASSWORD\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
+            "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nSELECT username FROM dba_users WHERE username=UPPER('"'"'$DB_USER'"'"');\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
 
-          if echo "$RESULT" | grep -q "ORA-01920"; then
+          if echo "$RESULT" | grep -qi "$DB_USER"; then
             echo ""
             echo -e "\e[33mMonitoring user $DB_USER already exists.\e[0m"
             echo ""
             echo "What would you like to do?"
-            echo "  1. Use the existing user $DB_USER and continue with grants"
+            echo "  1. Use the existing user $DB_USER (you will be asked for the password)"
             echo "  2. Create a new username"
             echo ""
             read -rp "Enter your choice (1 or 2): " USER_CHOICE
 
             if [ "$USER_CHOICE" = "1" ]; then
+              echo ""
+              read -rsp "Enter the existing password for $DB_USER: " NR_CLI_DB_PASSWORD
+              echo ""
+              echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
+              chmod 600 /tmp/nrdot_db_password
               echo ""
               echo -e "\e[32mUsing existing user:\e[0m \e[1m$DB_USER\e[0m"
 
@@ -242,9 +219,36 @@ install:
               echo ""
               read -rp "Enter new monitoring username: " NEW_USERNAME
               DB_USER="c##$NEW_USERNAME"
-              echo ""
-              echo "==> Creating new Oracle monitoring user: $DB_USER ..."
 
+              # Auto-generate a password meeting Oracle password complexity requirements:
+              # - First char guaranteed uppercase (cannot start with digit/special)
+              # - Guaranteed 2+ special chars (# and _), both shell-safe
+              # - Guaranteed uppercase, lowercase, digits
+              # - All parts shuffled randomly — total 15 chars, unique every time
+              _FIRST=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 1)
+              _UPPER=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 2)
+              _LOWER=$(cat /dev/urandom | tr -dc 'a-z' | head -c 6)
+              _DIGITS=$(cat /dev/urandom | tr -dc '0-9' | head -c 4)
+              _REST=$(printf '%s' "${_UPPER}${_LOWER}${_DIGITS}#_" | fold -w1 | shuf | tr -d '\n')
+              NR_CLI_DB_PASSWORD="${_FIRST}${_REST}"
+              unset _FIRST _UPPER _LOWER _DIGITS _REST
+              echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
+              chmod 600 /tmp/nrdot_db_password
+
+              echo ""
+              echo -e "\e[33m╔══════════════════════════════════════════════════════════════╗\e[0m"
+              echo -e "\e[33m║        ⚠  SAVE THIS PASSWORD — SHOWN ONLY ONCE  ⚠           ║\e[0m"
+              echo -e "\e[33m╠══════════════════════════════════════════════════════════════╣\e[0m"
+              echo -e "\e[33m║                                                              ║\e[0m"
+              echo -e "\e[33m║  Oracle monitoring user password:                            ║\e[0m"
+              echo -e "\e[33m║  \e[1m$NR_CLI_DB_PASSWORD\e[0m\e[33m                                             ║\e[0m"
+              echo -e "\e[33m║                                                              ║\e[0m"
+              echo -e "\e[33m║  Copy this password and store it in a safe place.            ║\e[0m"
+              echo -e "\e[33m║  It will be written to the NRDOT config file automatically.  ║\e[0m"
+              echo -e "\e[33m╚══════════════════════════════════════════════════════════════╝\e[0m"
+              echo ""
+
+              echo "==> Creating new Oracle monitoring user: $DB_USER ..."
               NEW_RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
                 {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
                 "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"$NR_CLI_DB_PASSWORD\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
@@ -266,14 +270,43 @@ install:
               exit 131
             fi
 
-          elif echo "$RESULT" | grep -qi "ORA-\|error"; then
-            echo ""
-            echo -e "\e[31mERROR:\e[0m Failed to create monitoring user $DB_USER:" >&2
-            echo "$RESULT" >&2
-            echo ""
-            exit 131
-
           else
+            # User does not exist — create fresh with auto-generated password
+            _FIRST=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 1)
+            _UPPER=$(cat /dev/urandom | tr -dc 'A-Z' | head -c 2)
+            _LOWER=$(cat /dev/urandom | tr -dc 'a-z' | head -c 6)
+            _DIGITS=$(cat /dev/urandom | tr -dc '0-9' | head -c 4)
+            _REST=$(printf '%s' "${_UPPER}${_LOWER}${_DIGITS}#_" | fold -w1 | shuf | tr -d '\n')
+            NR_CLI_DB_PASSWORD="${_FIRST}${_REST}"
+            unset _FIRST _UPPER _LOWER _DIGITS _REST
+            echo "$NR_CLI_DB_PASSWORD" > /tmp/nrdot_db_password
+            chmod 600 /tmp/nrdot_db_password
+
+            echo ""
+            echo -e "\e[33m╔══════════════════════════════════════════════════════════════╗\e[0m"
+            echo -e "\e[33m║        ⚠  SAVE THIS PASSWORD — SHOWN ONLY ONCE  ⚠           ║\e[0m"
+            echo -e "\e[33m╠══════════════════════════════════════════════════════════════╣\e[0m"
+            echo -e "\e[33m║                                                              ║\e[0m"
+            echo -e "\e[33m║  Oracle monitoring user password:                            ║\e[0m"
+            echo -e "\e[33m║  \e[1m$NR_CLI_DB_PASSWORD\e[0m\e[33m                                             ║\e[0m"
+            echo -e "\e[33m║                                                              ║\e[0m"
+            echo -e "\e[33m║  Copy this password and store it in a safe place.            ║\e[0m"
+            echo -e "\e[33m║  It will be written to the NRDOT config file automatically.  ║\e[0m"
+            echo -e "\e[33m╚══════════════════════════════════════════════════════════════╝\e[0m"
+            echo ""
+
+            echo "==> Creating Oracle monitoring user: $DB_USER ..."
+            CREATE_RESULT=$(ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+              {{.NR_CLI_DB_SSH_USER}}@{{.NR_CLI_DB_HOSTNAME}} \
+              "printf 'SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF\nCREATE USER $DB_USER IDENTIFIED BY \"$NR_CLI_DB_PASSWORD\";\nEXIT;\n' | sudo su - oracle -c 'sqlplus -S / as sysdba'") || true
+
+            if echo "$CREATE_RESULT" | grep -qi "ORA-\|error"; then
+              echo ""
+              echo -e "\e[31mERROR:\e[0m Failed to create monitoring user $DB_USER:" >&2
+              echo "$CREATE_RESULT" >&2
+              echo ""
+              exit 131
+            fi
             echo ""
             echo -e "\e[32mOracle monitoring user created successfully.\e[0m"
             echo -e "  Oracle username: \e[1m$DB_USER\e[0m"
