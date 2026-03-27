@@ -45,6 +45,14 @@ inputVars:
   - name: NR_CLI_LICENSE_KEY
     prompt: "New Relic Ingest License Key (found under Account Settings > API Keys, type: INGEST - LICENSE)"
     secret: true
+  - name: NR_CLI_REGION
+    prompt: "New Relic region (US or EU)"
+    secret: false
+    default: "US"
+  - name: NR_CLI_OTLP_PORT
+    prompt: "OTLP endpoint port (443, 4317, or 4318)"
+    secret: false
+    default: "4317"
 
 install:
   version: "3"
@@ -331,10 +339,14 @@ install:
           NR_CLI_DB_PASSWORD=$(cat /tmp/nrdot_db_password)
           rm -f /tmp/nrdot_db_password
 
-          # Determine OTLP endpoint based on NR region
-          OTLP_ENDPOINT="otlp.nr-data.net:4317"
-          if [ "{{.NEW_RELIC_REGION}}" = "EU" ] || [ "{{.NEW_RELIC_REGION}}" = "eu" ]; then
-            OTLP_ENDPOINT="otlp.eu01.nr-data.net:4317"
+          # Determine OTLP endpoint based on selected region and port
+          NR_REGION="{{.NR_CLI_REGION}}"
+          NR_PORT="{{.NR_CLI_OTLP_PORT}}"
+
+          if [ "${NR_REGION^^}" = "EU" ]; then
+            OTLP_ENDPOINT="https://otlp.eu01.nr-data.net:${NR_PORT}"
+          else
+            OTLP_ENDPOINT="https://otlp.nr-data.net:${NR_PORT}"
           fi
 
           cat > /etc/nrdot-collector-host/config.yaml << EOF
