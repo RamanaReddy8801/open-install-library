@@ -171,9 +171,7 @@ install:
             echo "  3. After making the above changes, restart the NRDOT Collector:"
             echo "     sudo systemctl restart nrdot-collector-host"
             echo ""
-            touch /tmp/nrdot_already_installed
-            touch /tmp/nrdot_skip_restart
-            exit 0
+            exit 131
           fi
 
           sudo rpm -ivh "/tmp/$RPM_FILE"
@@ -182,10 +180,6 @@ install:
     create_db_user:
       cmds:
         - |
-          if [ -f /tmp/nrdot_already_installed ]; then
-            exit 0
-          fi
-
           # Auto-generate a password meeting Oracle password complexity requirements:
           # - First char guaranteed uppercase (cannot start with digit/special)
           # - Guaranteed 2+ special chars (# and _), both shell-safe
@@ -325,15 +319,6 @@ install:
     configure_nrdot:
       cmds:
         - |
-          if [ -f /tmp/nrdot_already_installed ]; then
-            rm -f /tmp/nrdot_already_installed
-            echo ""
-            echo -e "\e[33mNRDOT Collector already installed — skipping config.yaml update.\e[0m"
-            echo -e "Please update /etc/nrdot-collector-host/config.yaml manually if needed."
-            echo ""
-            exit 0
-          fi
-
           echo ""
           echo "==> Configuring NRDOT Collector for Oracle DB monitoring..."
 
@@ -661,14 +646,6 @@ install:
     restart_nrdot:
       cmds:
         - |
-          if [ -f /tmp/nrdot_skip_restart ]; then
-            rm -f /tmp/nrdot_skip_restart
-            echo ""
-            echo -e "\e[33mNRDOT Collector already installed — skipping restart.\e[0m"
-            echo ""
-            exit 0
-          fi
-
           echo ""
           echo "==> Restarting NRDOT Collector..."
           sudo systemctl restart nrdot-collector-host.service
